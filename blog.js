@@ -826,14 +826,17 @@ function renderCatalog() {
   return `<div class="catalog"><h2 class="page-title">博文目录</h2>${blocks || `<div class="empty">目录还是空的。</div>`}</div>`;
 }
 
+function workImage(index) {
+  return `works/work-${String(index + 1).padStart(2, "0")}.jpg`;
+}
+
 function workCard(work, index) {
-  const seq = "ATCG".repeat(8).slice(index, index + 18);
   const links = (work.links || [])
     .map((link) => `<a href="${escapeHtml(link.href)}" target="_blank" rel="noopener">${escapeHtml(link.name)}</a>`)
     .join("");
   return `
     <article class="work-card">
-      <p class="card-seq">${seq}</p>
+      <img class="work-photo" src="${workImage(index)}" alt="" />
       <h3>${escapeHtml(work.title)}</h3>
       <p class="work-when">${escapeHtml(work.when)}</p>
       <p>${escapeHtml(work.excerpt)}</p>
@@ -1268,7 +1271,7 @@ function initGate() {
     return `
       <button type="button" class="card" data-work="${index}">
         <span class="card-index">${id}</span>
-        <span class="card-inner"><span class="card-seq">${geneSeq(index)}</span></span>
+        <span class="card-inner"><img src="${workImage(index)}" alt="" /></span>
         <span class="card-label">${escapeHtml(work.title)}</span>
       </button>`;
   }).join("");
