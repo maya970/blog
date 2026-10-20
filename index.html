@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>marco99168的博客</title>
+    <meta
+      name="description"
+      content="公开博客。早先写在链上记事本里的文字，现在谁都可以读。"
+    />
+    <meta name="theme-color" content="#3f86c0" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="banner">
+        <div class="sun" aria-hidden="true"></div>
+        <div class="cloud cloud-a" aria-hidden="true"></div>
+        <div class="cloud cloud-b" aria-hidden="true"></div>
+        <div class="banner-copy">
+          <p class="banner-kicker">个人博客</p>
+          <h1 id="blog-title">marco99168的博客</h1>
+          <p id="blog-sign">把记事本里的字，改成谁都能翻开的博客。</p>
+        </div>
+        <div class="seal" aria-hidden="true">原创</div>
+      </header>
+
+      <nav class="topnav" aria-label="博客导航">
+        <div class="nav-links">
+          <a href="#/" data-nav="home">首页</a>
+          <a href="#/catalog" data-nav="catalog">博文目录</a>
+          <a href="#/about" data-nav="about">关于我</a>
+          <a href="#/board" data-nav="board">留言板</a>
+          <a href="#/write" data-nav="write" id="nav-write" hidden>写博文</a>
+        </div>
+        <form id="search-form" class="search-form" role="search">
+          <input id="search-input" type="search" maxlength="40" placeholder="搜索博文" aria-label="搜索博文" />
+          <button type="submit">搜索</button>
+        </form>
+        <div class="login">
+          <button id="login-toggle" type="button">博主登录</button>
+          <div id="login-panel" class="login-panel" hidden>
+            <p id="login-status">只有博主钱包可以写博文。</p>
+            <button id="connect-wallet" type="button">连接浏览器钱包</button>
+            <button id="import-wallet" type="button">导入 wallet.json</button>
+            <button id="export-wallet" type="button" disabled>导出 wallet.json</button>
+            <input id="wallet-file" type="file" accept=".json,application/json" hidden />
+          </div>
+        </div>
+      </nav>
+
+      <div class="columns">
+        <aside class="sidebar" id="sidebar">
+          <section class="mod">
+            <h3>个人资料</h3>
+            <div class="profile">
+              <img class="avatar" alt="" src="avatar.svg" width="76" height="76" />
+              <p class="nick" id="profile-nick">marco99168</p>
+              <ul class="stats">
+                <li><span>博文</span><b id="stat-posts">–</b></li>
+                <li><span>评论</span><b id="stat-comments">–</b></li>
+                <li><span>来访</span><b id="stat-visits">–</b></li>
+              </ul>
+              <p class="meta-line"><span>开博</span><em id="stat-since">–</em></p>
+              <p class="meta-line"><span>所在</span><em id="profile-location">网上</em></p>
+              <p class="sign" id="profile-sign"></p>
+            </div>
+          </section>
+
+          <section class="mod">
+            <h3>公告</h3>
+            <p class="announce" id="announce">博文加载中…</p>
+          </section>
+
+          <section class="mod">
+            <h3>博客分类</h3>
+            <ul class="side-list" id="side-cats"></ul>
+          </section>
+
+          <section class="mod">
+            <h3>博文归档</h3>
+            <ul class="side-list" id="side-archive"></ul>
+          </section>
+
+          <section class="mod">
+            <h3>日历</h3>
+            <div class="calendar" id="calendar"></div>
+          </section>
+
+          <section class="mod">
+            <h3>最新博文</h3>
+            <ul class="side-list recent" id="side-recent"></ul>
+          </section>
+
+          <section class="mod">
+            <h3>友情链接</h3>
+            <ul class="side-list" id="side-links"></ul>
+          </section>
+        </aside>
+
+        <div class="main-wrap">
+          <div id="main">
+            <article class="article">
+              <h2>正在打开博客…</h2>
+              <p class="excerpt">从 Arweave 取回已经公开的记事。</p>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <footer class="copyright">
+        <p id="copyright-line">页面对所有人公开 · 博文保存在 Arweave</p>
+      </footer>
+    </div>
+
+    <div id="status" class="statusbar" role="status">准备就绪</div>
+    <script type="module" src="blog.js"></script>
+  </body>
+</html>
