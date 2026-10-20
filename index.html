@@ -3,33 +3,81 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>marco99168的博客</title>
-    <meta
-      name="description"
-      content="公开博客。早先写在链上记事本里的文字，现在谁都可以读。"
-    />
-    <meta name="theme-color" content="#3f86c0" />
+    <title>汇编哥的博客</title>
+    <meta name="description" content="汇编哥的公开博客。页面在 GitHub，博文保存在 Arweave。" />
+    <meta name="theme-color" content="#07141c" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <div class="genome-bg" aria-hidden="true">
+      <div class="genome-grid"></div>
+      <div class="genome-glow"></div>
+      <div class="genome-scan"></div>
+    </div>
+
+    <div id="gate" class="gate">
+      <div class="cursor-glow" id="cursorGlow" aria-hidden="true"></div>
+      <header class="hud-top">
+        <div class="hud-brand">
+          <span class="hud-mark">ATCG</span>
+          <span class="hud-title">GENE.LOG</span>
+          <span class="hud-sub">汇编哥 / 链上序列读取中</span>
+        </div>
+        <div class="hud-meta">
+          <span id="clock">--:--:--</span>
+          <span class="sep">·</span>
+          <span>DEPTH <span id="depthVal">0.00</span></span>
+        </div>
+      </header>
+      <main class="stage">
+        <section class="intro-panel">
+          <p class="intro-line">正在把链上的博文展开。下面这些是已经公开的作品。</p>
+          <p class="intro-hint">横向滑动，或滚动鼠标。点开一张可以看说明。</p>
+        </section>
+        <div class="perspective-wrap">
+          <div class="rail-connector" aria-hidden="true"></div>
+          <div class="list-scroller" id="scroller" role="region" aria-label="作品"></div>
+        </div>
+      </main>
+      <footer class="hud-bottom">
+        <span>STRAND A</span>
+        <span class="footer-quote" id="gate-status">正在连接 Arweave</span>
+        <span>STRAND T</span>
+      </footer>
+      <div class="lightbox" id="lightbox" hidden>
+        <button type="button" class="lightbox-close" id="lbClose" aria-label="关闭">×</button>
+        <div class="lightbox-frame">
+          <p class="card-seq" id="lbSeq"></p>
+          <h2 id="lbTitle"></h2>
+          <p class="lb-when" id="lbWhen"></p>
+          <p id="lbExcerpt"></p>
+          <p class="lb-links" id="lbLinks"></p>
+        </div>
+      </div>
+    </div>
+
     <div class="page">
       <header class="banner">
-        <div class="sun" aria-hidden="true"></div>
-        <div class="cloud cloud-a" aria-hidden="true"></div>
-        <div class="cloud cloud-b" aria-hidden="true"></div>
-        <div class="banner-copy">
-          <p class="banner-kicker">个人博客</p>
-          <h1 id="blog-title">marco99168的博客</h1>
-          <p id="blog-sign">把记事本里的字，改成谁都能翻开的博客。</p>
+        <div class="helix" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
         </div>
-        <div class="seal" aria-hidden="true">原创</div>
+        <div class="banner-copy">
+          <p class="banner-kicker">GENOME · 公开序列</p>
+          <h1 id="blog-title">汇编哥的博客</h1>
+          <p id="blog-sign">链上的文字，按可读的顺序展开。</p>
+        </div>
+        <div class="seal" aria-hidden="true">ATCG</div>
       </header>
 
       <nav class="topnav" aria-label="博客导航">
         <div class="nav-links">
           <a href="#/" data-nav="home">首页</a>
           <a href="#/catalog" data-nav="catalog">博文目录</a>
+          <a href="#/works" data-nav="works">作品</a>
           <a href="#/about" data-nav="about">关于我</a>
           <a href="#/board" data-nav="board">留言板</a>
           <a href="#/write" data-nav="write" id="nav-write" hidden>写博文</a>
@@ -56,7 +104,7 @@
             <h3>个人资料</h3>
             <div class="profile">
               <img class="avatar" alt="" src="avatar.svg" width="76" height="76" />
-              <p class="nick" id="profile-nick">marco99168</p>
+              <p class="nick" id="profile-nick">汇编哥</p>
               <ul class="stats">
                 <li><span>博文</span><b id="stat-posts">–</b></li>
                 <li><span>评论</span><b id="stat-comments">–</b></li>
@@ -103,14 +151,14 @@
           <div id="main">
             <article class="article">
               <h2>正在打开博客…</h2>
-              <p class="excerpt">从 Arweave 取回已经公开的记事。</p>
+              <p class="excerpt">从 Arweave 取回已经公开的文字。</p>
             </article>
           </div>
         </div>
       </div>
 
       <footer class="copyright">
-        <p id="copyright-line">页面对所有人公开 · 博文保存在 Arweave</p>
+        <p id="copyright-line">汇编哥的博客 · 页面对所有人公开 · 博文保存在 Arweave</p>
       </footer>
     </div>
 

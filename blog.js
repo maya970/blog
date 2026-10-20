@@ -11,10 +11,79 @@ const VISIT_KEY = "permablog-visits";
 const READ_KEY = "permablog-reads";
 const PENDING_KEY = "permablog-pending";
 
+const WORKS = [
+  {
+    title: "PHP网站：mxzgh.com（冒险者公会）",
+    when: "2008.08 — 现在",
+    excerpt: "让我们把小说动漫中的冒险者公会带到现实当中！零工自荐委托网|兼职|服务业|委托|远程|数字游民。",
+    links: [{ name: "静态展示页", href: "https://mxzgh.com" }],
+  },
+  {
+    title: "JavaScript：在线记忆宫殿笔记",
+    when: "2024.06 — 2026.12",
+    excerpt: "一种创新形式的笔记，结合我的世界和记事本，更加能够拟合人的记忆。",
+    links: [
+      { name: "GitHub", href: "https://github.com/maya970/memory-palace" },
+      { name: "静态展示页", href: "https://memory-palace-jkyy.vercel.app/" },
+    ],
+  },
+  {
+    title: "PowerShell：开源运行库",
+    when: "2024.01 — 2024.06",
+    excerpt: "人人都需要的免费安装 Windows 所需的运行库集成软件，不再使用网上 dll 收费。",
+    links: [{ name: "GitHub", href: "https://github.com/maya970/OpenRuntime" }],
+  },
+  {
+    title: "安卓：极简TXT",
+    when: "2023.07 — 2023.12",
+    excerpt: "创造一个简单，开源，安全的 txt 浏览器。",
+    links: [
+      { name: "GitHub", href: "https://github.com/maya970/jijian-txt" },
+      { name: "静态展示页", href: "https://jijian-txt.vercel.app/" },
+    ],
+  },
+  {
+    title: "PHP网站：马克书库",
+    when: "2023.01 — 2023.06",
+    excerpt: "继冷门历史小说之后新做的网站，想尽可能覆盖全部品类的小说。两万多本书没法逐本看完，只希望整理得还像那么一回事。",
+    links: [
+      { name: "GitHub", href: "https://github.com/maya970/allnovelindex" },
+      { name: "静态展示页", href: "https://allnovelindex.vercel.app/" },
+    ],
+  },
+  {
+    title: "安卓：本地化无广告扫码器",
+    when: "2022.06 — 2022.12",
+    excerpt: "扫码不该总是伴随着联网和对二维码内容的不确定访问。这个软件尽量本地化，让手机上的二维码能被自己看完。",
+    links: [
+      { name: "GitHub", href: "https://github.com/maya970/saomiao" },
+      { name: "静态展示页", href: "https://saomiao.vercel.app/" },
+    ],
+  },
+  {
+    title: "PHP网站：冷门历史小说",
+    when: "2022.01 — 2022.05",
+    excerpt: "以前很喜欢看历史穿越小说，书单一轮轮 404 之后就很难再找到能看的。这个站汇总了截至 2024 年共 8853 本历史穿越小说。",
+    links: [
+      { name: "GitHub", href: "https://github.com/maya970/Dark_light_novel_2024/" },
+      { name: "静态展示页", href: "https://booklist-git-master-maya970s-projects.vercel.app/" },
+    ],
+  },
+  {
+    title: "毕业设计：单用户多 session 逻辑归纳系统",
+    when: "2021.06 — 2021.12",
+    excerpt: "归纳逻辑编程从正负例和背景知识里推出一阶逻辑规则，而不是黑箱模型。这个毕业设计从同一个人跨会话的行为里，自动归纳可以解释的 Horn 规则。软件著作权登记号：2022SR0189454。",
+    links: [
+      { name: "GitHub", href: "https://github.com/maya970/SessionILP2022-zhuanli" },
+      { name: "静态展示页", href: "https://session-ilp-2022-zhuanli.vercel.app/" },
+    ],
+  },
+];
+
 const DEFAULT_PROFILE = {
-  title: "marco99168的博客",
-  nick: "marco99168",
-  signature: "把记事本里的字，改成谁都能翻开的博客。",
+  title: "汇编哥的博客",
+  nick: "汇编哥",
+  signature: "链上的文字，按可读的顺序展开。",
   announcement: "这里的博文对所有人公开。从前加密锁住的那一页，仍然不会出现。",
   location: "网上",
   links: [
@@ -80,6 +149,8 @@ function setStatus(text, kind = "") {
   const el = $("status");
   el.textContent = text;
   el.className = `statusbar${kind ? ` ${kind}` : ""}`;
+  const gateLine = $("gate-status");
+  if (gateLine && $("gate")?.dataset.done !== "1") gateLine.textContent = text;
 }
 
 function parseRoute() {
@@ -469,10 +540,12 @@ async function loadBlog() {
     state.error = "";
     setStatus(`已公开 ${state.posts.length} 篇博文。`, "ok");
     render();
+    finishGate();
   } catch (error) {
     state.error = error.message || "加载失败";
     setStatus(state.error, "err");
     render();
+    finishGate();
   } finally {
     state.loading = false;
   }
@@ -753,6 +826,30 @@ function renderCatalog() {
   return `<div class="catalog"><h2 class="page-title">博文目录</h2>${blocks || `<div class="empty">目录还是空的。</div>`}</div>`;
 }
 
+function workCard(work, index) {
+  const seq = "ATCG".repeat(8).slice(index, index + 18);
+  const links = (work.links || [])
+    .map((link) => `<a href="${escapeHtml(link.href)}" target="_blank" rel="noopener">${escapeHtml(link.name)}</a>`)
+    .join("");
+  return `
+    <article class="work-card">
+      <p class="card-seq">${seq}</p>
+      <h3>${escapeHtml(work.title)}</h3>
+      <p class="work-when">${escapeHtml(work.when)}</p>
+      <p>${escapeHtml(work.excerpt)}</p>
+      <p class="work-links">${links}</p>
+    </article>`;
+}
+
+function renderWorks() {
+  return `
+    <section class="works">
+      <h2 class="page-title">作品</h2>
+      <p class="hint">这些是公开做过的项目。链上博文读完之后，博客就按这个顺序继续往下看。</p>
+      ${WORKS.map(workCard).join("")}
+    </section>`;
+}
+
 function renderAbout() {
   const profile = state.profile;
   return `
@@ -849,6 +946,7 @@ function render() {
   const main = $("main");
   if (view === "post") main.innerHTML = renderPost();
   else if (view === "catalog") main.innerHTML = renderCatalog();
+  else if (view === "works") main.innerHTML = renderWorks();
   else if (view === "about") main.innerHTML = renderAbout();
   else if (view === "board") main.innerHTML = renderBoard();
   else if (view === "write" || view === "edit") main.innerHTML = renderWrite();
@@ -1154,7 +1252,92 @@ function bind() {
   $("export-wallet").addEventListener("click", exportWallet);
 }
 
+const gateStarted = performance.now();
+
+function geneSeq(index) {
+  return "ATCGTAACGGTATCGA".slice(index % 4) + "ATCG".repeat(4);
+}
+
+function initGate() {
+  const scroller = $("scroller");
+  const lightbox = $("lightbox");
+  const clockEl = $("clock");
+  if (!scroller || !lightbox || !clockEl) return;
+  scroller.innerHTML = WORKS.map((work, index) => {
+    const id = String(index + 1).padStart(2, "0");
+    return `
+      <button type="button" class="card" data-work="${index}">
+        <span class="card-index">${id}</span>
+        <span class="card-inner"><span class="card-seq">${geneSeq(index)}</span></span>
+        <span class="card-label">${escapeHtml(work.title)}</span>
+      </button>`;
+  }).join("");
+  const tick = () => {
+    const now = new Date();
+    clockEl.textContent = [now.getHours(), now.getMinutes(), now.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
+  };
+  tick();
+  setInterval(tick, 1000);
+  const glow = $("cursorGlow");
+  document.addEventListener("mousemove", (event) => {
+    if (!$("gate") || $("gate").hidden) return;
+    glow.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`;
+  });
+  const depthVal = $("depthVal");
+  scroller.addEventListener("scroll", () => {
+    const max = scroller.scrollWidth - scroller.clientWidth || 1;
+    depthVal.textContent = ((scroller.scrollLeft / max) * 1.2).toFixed(2);
+  }, { passive: true });
+  scroller.addEventListener("wheel", (event) => {
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || event.shiftKey) return;
+    event.preventDefault();
+    scroller.scrollLeft += event.deltaY;
+  }, { passive: false });
+  const open = (index) => {
+    const work = WORKS[index];
+    if (!work) return;
+    $("lbSeq").textContent = geneSeq(index);
+    $("lbTitle").textContent = work.title;
+    $("lbWhen").textContent = work.when;
+    $("lbExcerpt").textContent = work.excerpt;
+    $("lbLinks").innerHTML = (work.links || [])
+      .map((link) => `<a href="${escapeHtml(link.href)}" target="_blank" rel="noopener">${escapeHtml(link.name)}</a>`)
+      .join("");
+    lightbox.hidden = false;
+  };
+  scroller.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-work]");
+    if (card) open(Number(card.dataset.work));
+  });
+  $("lbClose").addEventListener("click", () => {
+    lightbox.hidden = true;
+  });
+  lightbox.addEventListener("click", (event) => {
+    if (event.target === lightbox) lightbox.hidden = true;
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") lightbox.hidden = true;
+  });
+}
+
+function finishGate() {
+  const gate = $("gate");
+  const line = $("gate-status");
+  if (!gate || gate.dataset.done === "1") return;
+  gate.dataset.done = "1";
+  if (line) line.textContent = state.error ? "序列没有取全" : "序列已展开";
+  const wait = Math.max(0, 1400 - (performance.now() - gateStarted));
+  setTimeout(() => {
+    gate.classList.add("gate-leave");
+    document.body.classList.add("genome-ready");
+    setTimeout(() => {
+      gate.hidden = true;
+    }, 700);
+  }, wait);
+}
+
 async function boot() {
+  initGate();
   bind();
   refreshLogin();
   render();
