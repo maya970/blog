@@ -402,6 +402,16 @@ button, input, textarea, select { font-family: inherit; }
 }
 
 .foot a { color: #666; }
+.foot .manage { margin-left: auto; display: inline-flex; gap: 12px; }
+.foot .manage a { color: var(--sky-deep); }
+.foot button.linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #c4472d;
+  font-size: 12px;
+  cursor: pointer;
+}
 
 .pager {
   display: flex;

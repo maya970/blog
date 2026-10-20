@@ -237,6 +237,15 @@ async function fetchJson(id) {
   return response.json();
 }
 
+function logicalIdOf(post) {
+  if (post.logicalId) return post.logicalId;
+  if (post.kind === "diary") return `diary:${post.date || ""}`;
+  if (post.kind === "notepad") return `notepad:${post.category}:${post.page || 0}`;
+  const raw = String(post.postId || post.id || "");
+  if (raw.startsWith("post:") || raw.startsWith("diary:") || raw.startsWith("notepad:")) return raw;
+  return `post:${raw}`;
+}
+
 function legacyPost(node, data, tags) {
   if (data?.encrypted === true || tags.get("Encrypted") === "true") return null;
   const content = String(data?.content || "");
@@ -254,8 +263,10 @@ function legacyPost(node, data, tags) {
     date,
     page: Number(data.page || tags.get("Page") || 0),
     timestamp: ts,
+    revisedAt: ts,
     legacy: true,
   };
+  entry.logicalId = logicalIdOf(entry);
   entry.title = makeTitle(entry);
   entry.day = day;
   entry.month = monthKey(day);
@@ -265,30 +276,61 @@ function legacyPost(node, data, tags) {
 function blogPost(node, data, tags) {
   const content = String(data?.content || "");
   if (!content.trim()) return null;
-  const ts = Number(data.updatedAt) || Number(node.block?.timestamp) || Number(tags.get("Unix-Time")) || 0;
-  const day = dayKey(ts || Math.floor(Date.now() / 1000));
+  const revisedAt = Number(data.updatedAt) || Number(node.block?.timestamp) || Number(tags.get("Unix-Time")) || 0;
+  const timestamp = Number(data.createdAt) || revisedAt;
+  const day = dayKey(timestamp || Math.floor(Date.now() / 1000));
+  const rawId = data.logicalId || data.postId || tags.get("Post-Id") || node.id;
   return {
     id: node.id,
-    postId: data.postId || tags.get("Post-Id") || node.id,
+    postId: rawId,
+    logicalId: logicalIdOf({ postId: rawId, id: node.id, kind: "post" }),
     kind: "post",
     title: data.title || tags.get("Title") || "无题",
     category: data.category || tags.get("Category") || "随笔",
     content,
-    timestamp: ts,
+    timestamp,
+    revisedAt,
     day,
     month: monthKey(day),
     legacy: false,
   };
 }
 
-function dedupePosts(list) {
+function settlePosts(list, deletes) {
   const map = new Map();
   for (const post of list) {
-    const key = post.kind === "diary" ? `diary:${post.date}` : post.kind === "notepad" ? `notepad:${post.category}:${post.page}` : `post:${post.postId || post.id}`;
+    const key = logicalIdOf(post);
+    post.logicalId = key;
     const prev = map.get(key);
-    if (!prev || post.timestamp >= prev.timestamp) map.set(key, post);
+    if (!prev) {
+      post.versionIds = [post.id];
+      map.set(key, post);
+      continue;
+    }
+    const prevRev = prev.revisedAt || prev.timestamp || 0;
+    const nextRev = post.revisedAt || post.timestamp || 0;
+    const winner = nextRev >= prevRev ? post : prev;
+    winner.versionIds = [...new Set([...(prev.versionIds || [prev.id]), post.id])];
+    winner.logicalId = key;
+    map.set(key, winner);
   }
-  return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id));
+  const deletedAt = new Map();
+  for (const item of deletes || []) {
+    if (!item?.postId) continue;
+    const ts = Number(item.timestamp) || 0;
+    if (ts >= (deletedAt.get(item.postId) || 0)) deletedAt.set(item.postId, ts);
+  }
+  return Array.from(map.values())
+    .filter((post) => {
+      const ts = deletedAt.get(post.logicalId) || 0;
+      return !(ts && ts >= (post.revisedAt || post.timestamp || 0));
+    })
+    .sort((a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id));
+}
+
+function findPost(id) {
+  if (!id) return null;
+  return state.posts.find((post) => post.id === id || post.logicalId === id || post.postId === id || post.versionIds?.includes(id)) || null;
 }
 
 function loadPending() {
@@ -348,6 +390,7 @@ async function loadBlog() {
     const posts = [];
     const comments = [];
     const guestbook = [];
+    const deletes = [];
     let profile = null;
 
     for (const item of legacyBodies) {
@@ -377,6 +420,9 @@ async function loadBlog() {
         };
         if (type === "guestbook") guestbook.push(entry);
         else comments.push(entry);
+      } else if (type === "delete") {
+        const postId = item.data.postId || tags.get("Post-Id") || "";
+        if (postId) deletes.push({ id: item.node.id, postId, timestamp: Number(item.data.updatedAt) || ts });
       } else if (type === "profile") {
         if (!profile || ts >= profile.timestamp) {
           profile = { ...item.data, timestamp: ts };
@@ -384,17 +430,23 @@ async function loadBlog() {
       }
     }
 
-    const known = new Set([...posts.map((post) => post.id), ...comments.map((item) => item.id), ...guestbook.map((item) => item.id)]);
+    const known = new Set([
+      ...posts.map((post) => post.id),
+      ...comments.map((item) => item.id),
+      ...guestbook.map((item) => item.id),
+      ...deletes.map((item) => item.id),
+    ]);
     const pending = loadPending().filter((item) => item.owner === OWNER && !known.has(item.id));
     for (const item of pending) {
       if (item.recordType === "post") posts.push(item);
       else if (item.recordType === "comment") comments.push(item);
       else if (item.recordType === "guestbook") guestbook.push(item);
+      else if (item.recordType === "delete") deletes.push(item);
       else if (item.recordType === "profile") profile = item;
     }
     savePending(pending);
 
-    state.posts = dedupePosts(posts);
+    state.posts = settlePosts(posts, deletes);
     if (state.posts[0]?.month) {
       const [year, month] = state.posts[0].month.split("-");
       state.calYear = Number(year);
@@ -426,8 +478,20 @@ async function loadBlog() {
   }
 }
 
-function commentsFor(postId) {
-  return state.comments.filter((item) => item.postId === postId);
+function commentsFor(post) {
+  const ids = new Set([post.id, post.logicalId, post.postId, ...(post.versionIds || [])].filter(Boolean));
+  return state.comments.filter((item) => ids.has(item.postId));
+}
+
+function timeLabel(post) {
+  const published = `发表于 ${formatTime(post.timestamp)}`;
+  if ((post.revisedAt || 0) > (post.timestamp || 0) + 60) return `${published} · 修改于 ${formatTime(post.revisedAt)}`;
+  return published;
+}
+
+function ownerActions(post) {
+  if (!canWrite()) return "";
+  return `<span class="manage"><a href="#/edit/${encodeURIComponent(post.id)}">修改</a><button type="button" class="linkish" data-delete="${escapeHtml(post.id)}">删除</button></span>`;
 }
 
 function applyProfile() {
@@ -536,21 +600,22 @@ function filterPosts() {
 
 function articleCard(post) {
   const piece = excerptOf(post.content);
-  const comments = commentsFor(post.id).length;
-  const reads = readCount(post.id, false);
+  const comments = commentsFor(post).length;
+  const reads = readCount(post.logicalId || post.id, false);
   return `
     <article class="article">
       <h2>
         <a class="cat" href="#/cat/${encodeURIComponent(post.category)}">[${escapeHtml(post.category)}]</a>
         <a href="#/post/${encodeURIComponent(post.id)}">${escapeHtml(post.title)}</a>
       </h2>
-      <p class="time">发表于 ${formatTime(post.timestamp)}</p>
+      <p class="time">${timeLabel(post)}</p>
       <div class="excerpt">${piece.html}</div>
       ${piece.more ? `<a class="more" href="#/post/${encodeURIComponent(post.id)}">阅读全文&gt;&gt;</a>` : ""}
       <div class="foot">
         <a href="#/post/${encodeURIComponent(post.id)}">阅读(${reads})</a>
         <a href="#/post/${encodeURIComponent(post.id)}">评论(${comments})</a>
         <a href="#/cat/${encodeURIComponent(post.category)}">分类：${escapeHtml(post.category)}</a>
+        ${ownerActions(post)}
       </div>
     </article>
   `;
@@ -599,12 +664,12 @@ let lastCountedPost = "";
 
 function renderPost() {
   const id = parseRoute().parts[1];
-  const index = state.posts.findIndex((post) => post.id === id);
+  const index = state.posts.findIndex((post) => post.id === id || post.logicalId === id || post.versionIds?.includes(id));
   const post = state.posts[index];
   if (!post) return `<div class="empty">没有找到这篇博文。<a href="#/">回首页</a></div>`;
-  const reads = readCount(id, lastCountedPost !== id);
-  lastCountedPost = id;
-  const comments = commentsFor(id);
+  const reads = readCount(post.logicalId || post.id, lastCountedPost !== post.logicalId);
+  lastCountedPost = post.logicalId || post.id;
+  const comments = commentsFor(post);
   const newer = state.posts[index - 1];
   const older = state.posts[index + 1];
   const nick = localStorage.getItem(NICK_KEY) || state.profile.nick;
@@ -614,11 +679,12 @@ function renderPost() {
         <a class="cat" href="#/cat/${encodeURIComponent(post.category)}">[${escapeHtml(post.category)}]</a>
         ${escapeHtml(post.title)}
       </h2>
-      <p class="time">发表于 ${formatTime(post.timestamp)} · 阅读(${reads}) · 评论(${comments.length})</p>
+      <p class="time">${timeLabel(post)} · 阅读(${reads}) · 评论(${comments.length})</p>
       <div class="prose">${renderRich(post.content)}</div>
       <div class="foot">
         <a href="#/cat/${encodeURIComponent(post.category)}">分类：${escapeHtml(post.category)}</a>
         <a href="https://arweave.net/${encodeURIComponent(post.id)}" target="_blank" rel="noopener">链上原文</a>
+        ${ownerActions(post)}
       </div>
     </article>
     <div class="neighbor">
@@ -695,7 +761,7 @@ function renderAbout() {
       <p>你好，我是 <strong>${escapeHtml(profile.nick)}</strong>。</p>
       <p>${escapeHtml(profile.signature)}</p>
       <p>这个博客是从以前的链上记事本改过来的。日记和分类本里没有加密的文字，现在谁打开都能看。加密保存的内容不会出现在这里。</p>
-      <p>你现在看到的页面放在 GitHub 上。博文、评论、留言和资料都写在 Arweave 里，打开页面时再从链上读出来。新写的内容也会公开留在那里，不能悄悄删掉，所以发表前会再看一眼。</p>
+      <p>你现在看到的页面放在 GitHub 上。博文、评论、留言和资料都写在 Arweave 里，打开页面时再从链上读出来。改过或删掉的博文，页面上只留最新结果；旧的那一笔交易还在链上。</p>
       <p>所在：${escapeHtml(profile.location)}</p>
     </section>
   `;
@@ -737,27 +803,13 @@ function renderBoard() {
 
 function renderWrite() {
   if (!canWrite()) return renderList();
+  const editing = parseRoute().parts[0] === "edit" ? findPost(parseRoute().parts[1]) : null;
+  if (parseRoute().parts[0] === "edit" && !editing) return `<div class="empty">没有找到要修改的博文。<a href="#/">回首页</a></div>`;
   const categories = Array.from(new Set(state.posts.map((post) => post.category))).sort((a, b) => a.localeCompare(b, "zh"));
   const options = categories.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
-  return `
-    <section class="composer">
-      <h2 class="page-title">写博文</h2>
-      <form data-form="post">
-        <div class="form-row">
-          <label for="post-title">标题</label>
-          <input id="post-title" name="title" type="text" maxlength="40" required />
-        </div>
-        <div class="form-row">
-          <label for="post-category">分类</label>
-          <input id="post-category" name="category" type="text" maxlength="20" list="cat-list" placeholder="日记、随笔，或新分类" required />
-          <datalist id="cat-list">${options}</datalist>
-        </div>
-        <div class="form-row">
-          <label for="post-content">正文</label>
-          <textarea id="post-content" name="content" maxlength="20000" required placeholder="写完就公开。空一行会分成段落。"></textarea>
-        </div>
-        <button class="btn-pub" type="submit">发表博文</button>
-      </form>
+  const profileForm = editing
+    ? ""
+    : `
       <h2 class="page-title" style="margin-top:22px">博客资料</h2>
       <form data-form="profile">
         <div class="form-row"><label for="pf-title">博客名</label><input id="pf-title" name="title" type="text" maxlength="24" value="${escapeHtml(state.profile.title)}" /></div>
@@ -766,7 +818,27 @@ function renderWrite() {
         <div class="form-row"><label for="pf-loc">所在</label><input id="pf-loc" name="location" type="text" maxlength="20" value="${escapeHtml(state.profile.location)}" /></div>
         <div class="form-row"><label for="pf-ann">公告</label><textarea id="pf-ann" name="announcement" maxlength="200" style="min-height:80px">${escapeHtml(state.profile.announcement)}</textarea></div>
         <button class="btn" type="submit">保存资料</button>
+      </form>`;
+  return `
+    <section class="composer">
+      <h2 class="page-title">${editing ? "修改博文" : "写博文"}</h2>
+      <form data-form="post" data-edit-id="${editing ? escapeHtml(editing.id) : ""}">
+        <div class="form-row">
+          <label for="post-title">标题</label>
+          <input id="post-title" name="title" type="text" maxlength="40" value="${escapeHtml(editing?.title || "")}" required />
+        </div>
+        <div class="form-row">
+          <label for="post-category">分类</label>
+          <input id="post-category" name="category" type="text" maxlength="20" list="cat-list" placeholder="日记、随笔，或新分类" value="${escapeHtml(editing?.category || "")}" required />
+          <datalist id="cat-list">${options}</datalist>
+        </div>
+        <div class="form-row">
+          <label for="post-content">正文</label>
+          <textarea id="post-content" name="content" maxlength="20000" required placeholder="写完就公开。空一行会分成段落。">${escapeHtml(editing?.content || "")}</textarea>
+        </div>
+        <button class="btn-pub" type="submit">${editing ? "保存修改" : "发表博文"}</button>
       </form>
+      ${profileForm}
     </section>
   `;
 }
@@ -779,7 +851,7 @@ function render() {
   else if (view === "catalog") main.innerHTML = renderCatalog();
   else if (view === "about") main.innerHTML = renderAbout();
   else if (view === "board") main.innerHTML = renderBoard();
-  else if (view === "write") main.innerHTML = renderWrite();
+  else if (view === "write" || view === "edit") main.innerHTML = renderWrite();
   else main.innerHTML = renderList();
   window.scrollTo(0, 0);
 }
@@ -820,7 +892,7 @@ function refreshLogin() {
   }
   const mine = canWrite();
   button.textContent = mine ? state.profile.nick : shortAddr(state.address);
-  status.textContent = mine ? "已是博主，可以写博文。" : `已连接 ${shortAddr(state.address)}。这个钱包不能写入，页面仍只显示博主发布的内容。`;
+  status.textContent = mine ? "已是博主，可以写、修改和删除博文。" : `已连接 ${shortAddr(state.address)}。这个钱包不能写入，页面仍只显示博主发布的内容。`;
 }
 
 async function loadArbundles() {
@@ -937,20 +1009,38 @@ async function publishPost(form) {
   const category = form.category.value.trim() || "随笔";
   const content = form.content.value.replace(/\r\n/g, "\n");
   if (!title || !content.trim()) throw new Error("标题和正文都要写。");
-  const postId = bytesToB64url(crypto.getRandomValues(new Uint8Array(9)));
+  const existing = form.dataset.editId ? findPost(form.dataset.editId) : null;
+  const logicalId = existing?.logicalId || `post:${bytesToB64url(crypto.getRandomValues(new Uint8Array(9)))}`;
   const updatedAt = Math.floor(Date.now() / 1000);
-  const data = { schema: "permablog/1", type: "post", postId, title, category, content, updatedAt };
+  const createdAt = existing?.timestamp || updatedAt;
+  const data = { schema: "permablog/1", type: "post", postId: logicalId, logicalId, title, category, content, createdAt, updatedAt };
   state.uploading = true;
   const id = await uploadRecord("post", data, [
     ["Title", title],
     ["Category", category],
-    ["Post-Id", postId],
+    ["Post-Id", logicalId],
   ]);
   const post = { ...blogPost({ id, block: null, tags: [] }, data, new Map()), recordType: "post", owner: OWNER };
-  state.posts = dedupePosts([post, ...state.posts]);
+  state.posts = settlePosts([post, ...state.posts], []);
   rememberPending(post);
-  setStatus("博文已公开。", "ok");
+  setStatus(existing ? "修改已公开。" : "博文已公开。", "ok");
   location.hash = `#/post/${encodeURIComponent(id)}`;
+}
+
+async function deletePost(id) {
+  const post = findPost(id);
+  if (!post) throw new Error("没有找到这篇博文。");
+  if (!canWrite()) throw new Error("只有博主钱包可以删除。");
+  const ok = window.confirm(`删除《${post.title}》？读者将不再看到这篇。链上的旧记录还会留下。`);
+  if (!ok) return;
+  const updatedAt = Math.floor(Date.now() / 1000);
+  const data = { schema: "permablog/1", type: "delete", postId: post.logicalId, updatedAt };
+  state.uploading = true;
+  const txId = await uploadRecord("delete", data, [["Post-Id", post.logicalId]]);
+  rememberPending({ id: txId, recordType: "delete", postId: post.logicalId, timestamp: updatedAt, owner: OWNER });
+  state.posts = state.posts.filter((item) => item.logicalId !== post.logicalId);
+  setStatus("这篇博文已从博客移除。", "ok");
+  location.hash = "#/";
 }
 
 async function publishProfile(form) {
@@ -978,7 +1068,7 @@ async function publishNote(form, type) {
   if (!nick || !content) throw new Error("昵称和内容都要写。");
   localStorage.setItem(NICK_KEY, nick);
   const updatedAt = Math.floor(Date.now() / 1000);
-  const postId = type === "comment" ? parseRoute().parts[1] : "";
+  const postId = type === "comment" ? findPost(parseRoute().parts[1])?.logicalId || parseRoute().parts[1] : "";
   const data = { schema: "permablog/1", type, nick, content, postId, updatedAt };
   const tags = [["Nick", nick]];
   if (postId) tags.push(["Post-Id", postId]);
@@ -1023,6 +1113,14 @@ function bind() {
     const pageBtn = event.target.closest("[data-page]");
     if (pageBtn && !pageBtn.disabled) gotoPage(Number(pageBtn.dataset.page));
     if (event.target.id === "retry-btn") loadBlog();
+    const remove = event.target.closest("[data-delete]");
+    if (remove && !state.uploading) {
+      deletePost(remove.dataset.delete)
+        .catch((error) => setStatus(error.message || "没有删除", "err"))
+        .finally(() => {
+          state.uploading = false;
+        });
+    }
   });
   $("main").addEventListener("submit", (event) => {
     const form = event.target.closest("form");
